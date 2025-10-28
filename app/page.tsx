@@ -1,0 +1,804 @@
+"use client"
+
+import { useState } from "react"
+import { ChevronLeft, ChevronRight, Plus, ChevronDown, ChevronUp, X } from "lucide-react"
+
+export default function CalendarPage() {
+  const [selectedView, setSelectedView] = useState<"月" | "5日" | "3日" | "ToDo">("月")
+  const [currentDate, setCurrentDate] = useState(new Date(2025, 9, 1)) // October 2025
+  const [selectedStartDate, setSelectedStartDate] = useState<Date | null>(null)
+  const [todos, setTodos] = useState([
+    { id: 1, checked: true, title: "OO授業の課題", deadline: "10/7 23:55", priority: "高", memo: "" },
+    { id: 2, checked: false, title: "XX授業の振り返り", deadline: "10/6 16:00", priority: "中", memo: "" },
+  ])
+  const [sortColumn, setSortColumn] = useState<"title" | "deadline" | "priority" | null>(null)
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState({ title: "", deadline: "", priority: "", memo: "" })
+
+  const handleSort = (column: "title" | "deadline" | "priority") => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+    } else {
+      setSortColumn(column)
+      setSortDirection("asc")
+    }
+  }
+
+  const getSortedTodos = (todoList: typeof todos) => {
+    if (!sortColumn) return todoList
+
+    return [...todoList].sort((a, b) => {
+      let compareA: string | number = ""
+      let compareB: string | number = ""
+
+      if (sortColumn === "title") {
+        compareA = a.title
+        compareB = b.title
+      } else if (sortColumn === "deadline") {
+        compareA = a.deadline
+        compareB = b.deadline
+      } else if (sortColumn === "priority") {
+        const priorityOrder: { [key: string]: number } = { 高: 3, 中: 2, 低: 1 }
+        compareA = priorityOrder[a.priority] || 0
+        compareB = priorityOrder[b.priority] || 0
+      }
+
+      if (compareA < compareB) return sortDirection === "asc" ? -1 : 1
+      if (compareA > compareB) return sortDirection === "asc" ? 1 : -1
+      return 0
+    })
+  }
+
+  const activeTodos = getSortedTodos(todos.filter((todo) => !todo.checked))
+  const completedTodos = getSortedTodos(todos.filter((todo) => todo.checked))
+
+  const goToPreviousMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
+  }
+
+  const goToNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+  }
+
+  const generateMiniCalendar = () => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const startDay = firstDay.getDay()
+    const daysInMonth = lastDay.getDate()
+    const prevMonthLastDay = new Date(year, month, 0).getDate()
+
+    const weeks: number[][] = []
+    let currentWeek: number[] = []
+
+    // Fill previous month days
+    for (let i = startDay - 1; i >= 0; i--) {
+      currentWeek.push(prevMonthLastDay - i)
+    }
+
+    // Fill current month days
+    for (let day = 1; day <= daysInMonth; day++) {
+      currentWeek.push(day)
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek)
+        currentWeek = []
+      }
+    }
+
+    // Fill next month days if needed
+    if (currentWeek.length > 0) {
+      let nextDay = 1
+      while (currentWeek.length < 7) {
+        currentWeek.push(nextDay++)
+      }
+      weeks.push(currentWeek)
+    }
+
+    return weeks
+  }
+
+  const generateMainCalendar = () => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const startDay = firstDay.getDay()
+    const daysInMonth = lastDay.getDate()
+    const prevMonthLastDay = new Date(year, month, 0).getDate()
+
+    const weeks: string[][] = []
+    let currentWeek: string[] = []
+
+    // Fill previous month days
+    for (let i = startDay - 1; i >= 0; i--) {
+      currentWeek.push(`${prevMonthLastDay - i}日`)
+    }
+
+    // Fill current month days
+    for (let day = 1; day <= daysInMonth; day++) {
+      currentWeek.push(`${day}日`)
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek)
+        currentWeek = []
+      }
+    }
+
+    // Fill next month days
+    if (currentWeek.length > 0) {
+      let nextDay = 1
+      while (currentWeek.length < 7) {
+        const nextMonth = month + 1
+        const nextMonthName = nextMonth === 12 ? "1月" : ""
+        currentWeek.push(nextMonthName ? `${nextMonthName}${nextDay}日` : `${nextDay}日`)
+        nextDay++
+      }
+      weeks.push(currentWeek)
+    }
+
+    return weeks
+  }
+
+  const handleDateClick = (day: number, weekIndex: number, dayIndex: number) => {
+    if (selectedView === "月" || selectedView === "ToDo") return // Only work for 5-day and 3-day views
+
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const startDay = firstDay.getDay()
+
+    // Calculate which month this day belongs to
+    let targetMonth = month
+    const targetDay = day
+
+    if (weekIndex === 0 && dayIndex < startDay) {
+      // Previous month
+      targetMonth = month - 1
+    } else if (weekIndex === generateMiniCalendar().length - 1 && day < 7) {
+      // Next month
+      targetMonth = month + 1
+    }
+
+    const clickedDate = new Date(year, targetMonth, targetDay)
+    setSelectedStartDate(clickedDate)
+  }
+
+  const isDateInRange = (day: number, weekIndex: number, dayIndex: number) => {
+    if (selectedView === "月" || selectedView === "ToDo") return false
+
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const startDay = firstDay.getDay()
+
+    let targetMonth = month
+    const targetDay = day
+
+    if (weekIndex === 0 && dayIndex < startDay) {
+      targetMonth = month - 1
+    } else if (weekIndex === generateMiniCalendar().length - 1 && day < 7) {
+      targetMonth = month + 1
+    }
+
+    const checkDate = new Date(year, targetMonth, targetDay)
+
+    // Get the displayed date range
+    const displayedDates = selectedView === "5日" ? generateFiveDayDates() : generateThreeDayDates()
+    const startDate = selectedStartDate || new Date(year, month, 1)
+
+    // Check if this date is in the displayed range
+    const daysToShow = selectedView === "5日" ? 5 : 3
+    for (let i = 0; i < daysToShow; i++) {
+      const rangeDate = new Date(startDate)
+      rangeDate.setDate(startDate.getDate() + i)
+      if (
+        checkDate.getDate() === rangeDate.getDate() &&
+        checkDate.getMonth() === rangeDate.getMonth() &&
+        checkDate.getFullYear() === rangeDate.getFullYear()
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
+  const generateFiveDayDates = () => {
+    const startDate = selectedStartDate || new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    const weekDaysShort = ["日", "月", "火", "水", "木", "金", "土"]
+
+    const dates = []
+    for (let i = 0; i < 5; i++) {
+      const date = new Date(startDate)
+      date.setDate(startDate.getDate() + i)
+      dates.push({
+        day: `${date.getDate()}`,
+        weekday: weekDaysShort[date.getDay()],
+      })
+    }
+    return dates
+  }
+
+  const generateThreeDayDates = () => {
+    const startDate = selectedStartDate || new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    const weekDaysShort = ["日", "月", "火", "水", "木", "金", "土"]
+
+    const dates = []
+    for (let i = 0; i < 3; i++) {
+      const date = new Date(startDate)
+      date.setDate(startDate.getDate() + i)
+      dates.push({
+        day: `${date.getDate()}`,
+        weekday: weekDaysShort[date.getDay()],
+      })
+    }
+    return dates
+  }
+
+  const miniCalendarDays = generateMiniCalendar()
+  const mainCalendarDays = generateMainCalendar()
+  const fiveDayDates = generateFiveDayDates()
+  const threeDayDates = generateThreeDayDates()
+
+  const timeSlots = [
+    "終日",
+    "0:00",
+    "1:00",
+    "2:00",
+    "3:00",
+    "4:00",
+    "5:00",
+    "6:00",
+    "7:00",
+    "8:00",
+    "9:00",
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+    "18:00",
+    "19:00",
+    "20:00",
+    "21:00",
+    "22:00",
+    "23:00",
+  ]
+
+  const weekDaysShort = ["日", "月", "火", "水", "木", "金", "土"]
+  const weekDaysFull = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"]
+
+  const toggleTodo = (id: number) => {
+    setTodos(todos.map((todo) => (todo.id === id ? { ...todo, checked: !todo.checked } : todo)))
+  }
+
+  const deleteTodo = (id: number) => {
+    setTodos(todos.filter((todo) => todo.id !== id))
+  }
+
+  const startEditing = (todo: (typeof todos)[0]) => {
+    setEditingId(todo.id)
+    setEditForm({
+      title: todo.title,
+      deadline: todo.deadline,
+      priority: todo.priority,
+      memo: todo.memo,
+    })
+  }
+
+  const cancelEditing = () => {
+    setEditingId(null)
+    setEditForm({ title: "", deadline: "", priority: "", memo: "" })
+  }
+
+  const saveEditing = () => {
+    if (editingId !== null) {
+      setTodos(
+        todos.map((todo) =>
+          todo.id === editingId
+            ? {
+                ...todo,
+                title: editForm.title,
+                deadline: editForm.deadline,
+                priority: editForm.priority,
+                memo: editForm.memo,
+              }
+            : todo,
+        ),
+      )
+      setEditingId(null)
+      setEditForm({ title: "", deadline: "", priority: "", memo: "" })
+    }
+  }
+
+  const displayToDatetimeLocal = (displayDate: string): string => {
+    // Format: "10/6 16:00" -> "2025-10-06T16:00"
+    const [datePart, timePart] = displayDate.split(" ")
+    const [month, day] = datePart.split("/")
+    const year = currentDate.getFullYear()
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${timePart}`
+  }
+
+  const datetimeLocalToDisplay = (datetimeLocal: string): string => {
+    // Format: "2025-10-06T16:00" -> "10/6 16:00"
+    const [datePart, timePart] = datetimeLocal.split("T")
+    const [year, month, day] = datePart.split("-")
+    return `${Number.parseInt(month)}/${Number.parseInt(day)} ${timePart}`
+  }
+
+  return (
+    <div className="min-h-screen bg-calendar-bg p-4">
+      <div className="flex gap-4 max-w-[1440px] mx-auto h-[calc(100vh-32px)]">
+        {/* Left Sidebar */}
+        <div className="w-1/4 flex-shrink-0">
+          {/* Mini Calendar */}
+          <div className="bg-calendar-card rounded-lg p-5 mb-4">
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between mb-4">
+              <button onClick={goToPreviousMonth} className="p-1 hover:opacity-70 transition-opacity">
+                <ChevronLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <span className="text-foreground font-semibold text-base">
+                {currentDate.getFullYear()}/{(currentDate.getMonth() + 1).toString().padStart(2, "0")}
+              </span>
+              <button onClick={goToNextMonth} className="p-1 hover:opacity-70 transition-opacity">
+                <ChevronRight className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
+
+            {/* Week Days Header */}
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {weekDaysShort.map((day) => (
+                <div key={day} className="text-center text-[13px] text-foreground font-medium">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar Grid */}
+            <div className="space-y-1">
+              {miniCalendarDays.map((week, weekIndex) => (
+                <div key={weekIndex} className="grid grid-cols-7 gap-1">
+                  {week.map((day, dayIndex) => {
+                    const isInRange = isDateInRange(day, weekIndex, dayIndex)
+                    return (
+                      <button
+                        key={dayIndex}
+                        onClick={() => handleDateClick(day, weekIndex, dayIndex)}
+                        className={`text-center text-[13px] py-1.5 rounded transition-colors ${
+                          isInRange
+                            ? "bg-calendar-primary text-white font-semibold"
+                            : "text-foreground hover:bg-calendar-card-hover"
+                        } ${selectedView === "月" || selectedView === "ToDo" ? "cursor-default" : "cursor-pointer"}`}
+                      >
+                        {day}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* View Tabs */}
+          <div className="flex gap-1.5 mb-4">
+            <button
+              onClick={() => setSelectedView("月")}
+              className={`px-3 py-2 rounded-md text-[13px] font-medium transition-colors whitespace-nowrap ${
+                selectedView === "月"
+                  ? "bg-calendar-primary text-white"
+                  : "bg-calendar-card text-foreground hover:bg-calendar-primary hover:text-white"
+              }`}
+            >
+              月
+            </button>
+            <button
+              onClick={() => setSelectedView("5日")}
+              className={`px-3 py-2 rounded-md text-[13px] font-medium transition-colors whitespace-nowrap ${
+                selectedView === "5日"
+                  ? "bg-calendar-primary text-white"
+                  : "bg-calendar-card text-foreground hover:bg-calendar-primary hover:text-white"
+              }`}
+            >
+              5日
+            </button>
+            <button
+              onClick={() => setSelectedView("3日")}
+              className={`px-3 py-2 rounded-md text-[13px] font-medium transition-colors whitespace-nowrap ${
+                selectedView === "3日"
+                  ? "bg-calendar-primary text-white"
+                  : "bg-calendar-card text-foreground hover:bg-calendar-primary hover:text-white"
+              }`}
+            >
+              3日
+            </button>
+            <button
+              onClick={() => setSelectedView("ToDo")}
+              className={`px-3 py-2 rounded-md text-[13px] font-medium transition-colors whitespace-nowrap ${
+                selectedView === "ToDo"
+                  ? "bg-calendar-primary text-white"
+                  : "bg-calendar-card text-foreground hover:bg-calendar-primary hover:text-white"
+              }`}
+            >
+              ToDo
+            </button>
+          </div>
+
+          {/* Today's Schedule */}
+          <div>
+            <h2 className="text-foreground font-medium text-base mb-3">今日の予定</h2>
+            <div className="border-t border-calendar-card pt-4 min-h-[200px]"></div>
+          </div>
+        </div>
+
+        {/* Main Calendar */}
+        <div className="flex-1 min-w-0 flex flex-col -ml-1">
+          {/* Add Button */}
+          <div className="flex justify-center mb-4 flex-shrink-0">
+            <button className="bg-calendar-primary hover:bg-calendar-primary-hover transition-colors text-white px-12 py-3 rounded-md flex items-center justify-center">
+              <Plus className="w-6 h-6" />
+            </button>
+          </div>
+
+          {selectedView === "月" ? (
+            <>
+              {/* Week Days Header */}
+              <div className="grid grid-cols-7 gap-2.5 mb-3 flex-shrink-0">
+                {weekDaysFull.map((day) => (
+                  <div key={day} className="text-center text-foreground font-medium text-[13px]">
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="w-full flex-1 flex flex-col gap-2.5 min-h-0">
+                {mainCalendarDays.map((week, weekIndex) => (
+                  <div key={weekIndex} className="grid grid-cols-7 gap-2.5 flex-1">
+                    {week.map((day, dayIndex) => (
+                      <div
+                        key={dayIndex}
+                        className="bg-calendar-card rounded-md p-2.5 hover:bg-calendar-card-hover transition-colors cursor-pointer"
+                      >
+                        <div className="text-foreground font-semibold text-[14px]">{day}</div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : selectedView === "5日" ? (
+            <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 -ml-4">
+              <div className="flex gap-1">
+                {/* Time Labels Column */}
+                <div className="w-[100px] flex-shrink-0">
+                  <div className="h-[40px]"></div>
+                  {timeSlots.map((time) => (
+                    <div key={time} className="h-[80px] flex items-start justify-end pr-2 text-foreground text-[13px]">
+                      {time}
+                    </div>
+                  ))}
+                </div>
+
+                {/* 5-Day Grid */}
+                <div className="grid grid-cols-5 gap-2 flex-1">
+                  {fiveDayDates.map((date, index) => (
+                    <div key={index} className="flex flex-col min-w-0">
+                      {/* Date Header */}
+                      <div className="text-center text-foreground font-semibold text-[15px] h-[40px] flex items-center justify-center sticky top-0 bg-calendar-bg z-10 mb-2">
+                        {date.day}({date.weekday})
+                      </div>
+
+                      {/* Time Slots Container - Single Rounded Rectangle */}
+                      <div className="bg-calendar-card rounded-lg hover:bg-calendar-card-hover transition-colors cursor-pointer">
+                        {timeSlots.map((time) => (
+                          <div key={time} className="h-[80px] border-b border-calendar-divider last:border-b-0"></div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : selectedView === "3日" ? (
+            <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 -ml-4">
+              <div className="flex gap-1">
+                {/* Time Labels Column */}
+                <div className="w-[100px] flex-shrink-0">
+                  <div className="h-[40px]"></div>
+                  {timeSlots.map((time) => (
+                    <div key={time} className="h-[80px] flex items-start justify-end pr-2 text-foreground text-[13px]">
+                      {time}
+                    </div>
+                  ))}
+                </div>
+
+                {/* 3-Day Grid */}
+                <div className="grid grid-cols-3 gap-2 flex-1">
+                  {threeDayDates.map((date, index) => (
+                    <div key={index} className="flex flex-col min-w-0">
+                      {/* Date Header */}
+                      <div className="text-center text-foreground font-semibold text-[15px] h-[40px] flex items-center justify-center sticky top-0 bg-calendar-bg z-10 mb-2">
+                        {date.day}({date.weekday})
+                      </div>
+
+                      {/* Time Slots Container - Single Rounded Rectangle */}
+                      <div className="bg-calendar-card rounded-lg hover:bg-calendar-card-hover transition-colors cursor-pointer">
+                        {timeSlots.map((time) => (
+                          <div key={time} className="h-[80px] border-b border-calendar-divider last:border-b-0"></div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full bg-white rounded-lg p-5 overflow-y-auto">
+              <div className="mb-8">
+                {/* Table Header with Sortable Columns */}
+                <div className="flex items-center gap-3 pb-4 border-b border mb-4">
+                  <div className="w-[36px]"></div>
+                  <button
+                    onClick={() => handleSort("title")}
+                    className="flex-1 flex items-center gap-2 text-foreground font-semibold text-[15px] hover:opacity-70 transition-opacity"
+                  >
+                    タイトル
+                    {sortColumn === "title" ? (
+                      sortDirection === "asc" ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )
+                    ) : (
+                      <ChevronDown className="w-4 h-4 opacity-30" />
+                    )}
+                  </button>
+                  <div className="w-[220px] flex items-center gap-4">
+                    <button
+                      onClick={() => handleSort("deadline")}
+                      className="flex items-center gap-2 text-foreground font-semibold text-[15px] hover:opacity-70 transition-opacity"
+                    >
+                      期限
+                      {sortColumn === "deadline" ? (
+                        sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )
+                      ) : (
+                        <ChevronDown className="w-4 h-4 opacity-30" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleSort("priority")}
+                      className="flex items-center gap-2 text-foreground font-semibold text-[15px] hover:opacity-70 transition-opacity"
+                    >
+                      優先度
+                      {sortColumn === "priority" ? (
+                        sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        )
+                      ) : (
+                        <ChevronDown className="w-4 h-4 opacity-30" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="w-[90px]"></div>
+                </div>
+
+                {/* Active Todo Items */}
+                <div className="space-y-4">
+                  {activeTodos.map((todo) => (
+                    <div key={todo.id} className="flex items-center gap-3">
+                      {/* Checkbox */}
+                      <button
+                        onClick={() => toggleTodo(todo.id)}
+                        className="w-[28px] h-[28px] border-2 border-foreground rounded-[4px] flex items-center justify-center hover:bg-calendar-bg transition-colors flex-shrink-0"
+                      >
+                        {todo.checked && (
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 20 20"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M16.6667 5L7.50004 14.1667L3.33337 10"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </button>
+
+                      {/* Title and Memo */}
+                      <div className="flex-1">
+                        <div className="text-foreground text-[15px] font-medium">{todo.title}</div>
+                        {todo.memo && <div className="text-foreground text-[13px] opacity-60 mt-1">{todo.memo}</div>}
+                      </div>
+
+                      {/* Deadline and Priority Combined */}
+                      <div className="w-[220px] flex items-center gap-4 text-foreground text-[15px]">
+                        <span>{todo.deadline}</span>
+                        <span>{todo.priority}</span>
+                      </div>
+
+                      {/* Details Button */}
+                      <div className="w-[90px]">
+                        <button
+                          onClick={() => startEditing(todo)}
+                          className="bg-calendar-action hover:bg-calendar-action-hover transition-colors text-white px-4 py-2 rounded text-[14px] font-medium w-full"
+                        >
+                          詳細
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {completedTodos.length > 0 && (
+                  <div>
+                    <h3 className="text-foreground font-semibold text-[16px] mb-4 pb-3 border-b border">
+                      完了したタスク
+                    </h3>
+                    {/* Completed Todo Items */}
+                    <div className="space-y-4">
+                      {completedTodos.map((todo) => (
+                        <div key={todo.id} className="flex items-center gap-3 opacity-60">
+                          {/* Checkbox */}
+                          <button
+                            onClick={() => toggleTodo(todo.id)}
+                            className="w-[28px] h-[28px] border-2 border-foreground rounded-[4px] flex items-center justify-center hover:bg-calendar-bg transition-colors flex-shrink-0"
+                          >
+                            {todo.checked && (
+                              <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 20 20"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                              >
+                                <path
+                                  d="M16.6667 5L7.50004 14.1667L3.33337 10"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            )}
+                          </button>
+
+                          {/* Title with strike-through */}
+                          <div className="flex-1 text-foreground text-[15px] font-medium line-through">
+                            {todo.title}
+                          </div>
+
+                          {/* Deadline and Priority Combined */}
+                          <div className="w-[220px] flex items-center gap-4 text-foreground text-[15px]">
+                            <span>{todo.deadline}</span>
+                            <span>{todo.priority}</span>
+                          </div>
+
+                          <div className="w-[90px]">
+                            <button
+                              onClick={() => deleteTodo(todo.id)}
+                              className="bg-red-600 hover:bg-red-700 transition-colors text-white px-4 py-2 rounded text-[14px] font-medium w-full"
+                            >
+                              削除
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Edit Task Modal */}
+      {editingId !== null && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={cancelEditing}
+        >
+          <div
+            className="bg-white rounded-lg p-6 w-[500px] max-w-[90vw] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-foreground text-[18px] font-semibold">タスクを編集</h2>
+              <button onClick={cancelEditing} className="text-foreground hover:opacity-70 transition-opacity">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Edit Form */}
+            <div className="space-y-4">
+              {/* Title Input */}
+              <div>
+                <label className="block text-foreground text-[14px] font-medium mb-2">タイトル</label>
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full text-foreground text-[15px] border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-calendar-primary focus:border-transparent"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                {/* Deadline Input */}
+                <div className="flex-1">
+                  <label className="block text-foreground text-[14px] font-medium mb-2">期限</label>
+                  <input
+                    type="datetime-local"
+                    value={displayToDatetimeLocal(editForm.deadline)}
+                    onChange={(e) => setEditForm({ ...editForm, deadline: datetimeLocalToDisplay(e.target.value) })}
+                    className="w-full text-foreground text-[16px] border-2 border-gray-300 rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-calendar-primary focus:border-calendar-primary cursor-pointer hover:border-calendar-primary transition-colors"
+                    style={{ minHeight: "48px" }}
+                  />
+                  <p className="text-gray-500 text-[12px] mt-1">タップしてスクロールで日時を選択</p>
+                </div>
+
+                {/* Priority Select */}
+                <div className="w-[140px]">
+                  <label className="block text-foreground text-[14px] font-medium mb-2">優先度</label>
+                  <select
+                    value={editForm.priority}
+                    onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}
+                    className="w-full text-foreground text-[15px] border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-calendar-primary focus:border-transparent"
+                    style={{ minHeight: "48px" }}
+                  >
+                    <option value="高">高</option>
+                    <option value="中">中</option>
+                    <option value="低">低</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-foreground text-[14px] font-medium mb-2">メモ</label>
+                <textarea
+                  value={editForm.memo}
+                  onChange={(e) => setEditForm({ ...editForm, memo: e.target.value })}
+                  placeholder="メモを入力..."
+                  className="w-full text-foreground text-[15px] border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-calendar-primary focus:border-transparent resize-none"
+                  rows={8}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={cancelEditing}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 transition-colors text-white px-4 py-2.5 rounded-md text-[15px] font-medium"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={saveEditing}
+                className="flex-1 bg-green-600 hover:bg-green-700 transition-colors text-white px-4 py-2.5 rounded-md text-[15px] font-medium"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
