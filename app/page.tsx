@@ -823,7 +823,20 @@ export default function CalendarPage() {
                       const dayNum = Number.parseInt(day.replace(/[^\d]/g, ""))
                       const year = currentDate.getFullYear()
                       const month = currentDate.getMonth()
-                      const dayAppointments = getAppointmentsForDate(year, month, dayNum)
+
+                      const firstDay = new Date(year, month, 1)
+                      const startDay = firstDay.getDay()
+
+                      let targetMonth = month
+                      if (weekIndex === 0 && dayIndex < startDay) {
+                        // Previous month
+                        targetMonth = month - 1
+                      } else if (weekIndex === mainCalendarDays.length - 1 && dayNum < 15) {
+                        // Next month (days less than 15 in the last week are likely next month)
+                        targetMonth = month + 1
+                      }
+
+                      const dayAppointments = getAppointmentsForDate(year, targetMonth, dayNum)
 
                       return (
                         <div
@@ -1089,9 +1102,8 @@ export default function CalendarPage() {
                           )}
                         </button>
 
-                        {/* Title and Memo */}
-                        <div className="flex-1">
-                          <div className="text-foreground text-[15px] font-medium">{todo.title}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-foreground text-[15px] font-medium break-words">{todo.title}</div>
                           {todo.memo && (
                             <div className="text-foreground text-[13px] opacity-60 mt-1 whitespace-pre-wrap break-words">
                               {todo.memo}
@@ -1153,8 +1165,7 @@ export default function CalendarPage() {
                             )}
                           </button>
 
-                          {/* Title with strike-through */}
-                          <div className="flex-1 text-foreground text-[15px] font-medium line-through">
+                          <div className="flex-1 min-w-0 text-foreground text-[15px] font-medium line-through break-words">
                             {todo.title}
                           </div>
 
