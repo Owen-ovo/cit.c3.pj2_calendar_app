@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import React from "react"
+
+import { useState, useRef } from "react"
 import { ChevronLeft, ChevronRight, Plus, ChevronDown, ChevronUp, X } from "lucide-react"
 
 export default function CalendarPage() {
@@ -47,6 +49,17 @@ export default function CalendarPage() {
     location: "",
     memo: "",
   })
+
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null)
+
+  const [draggingAppointmentId, setDraggingAppointmentId] = useState<number | null>(null)
+  const [dragStartY, setDragStartY] = useState<number>(0)
+  const [dragCurrentY, setDragCurrentY] = useState<number>(0)
+  const [dragStartX, setDragStartX] = useState<number>(0)
+  const [dragCurrentX, setDragCurrentX] = useState<number>(0)
+  const [dragOriginalDayIndex, setDragOriginalDayIndex] = useState<number>(0)
+  const [dragOriginalStartDate, setDragOriginalStartDate] = useState<string>("")
+  const [hasDragged, setHasDragged] = useState<boolean>(false)
 
   // Helper functions for appointment and todo indicators
   const hasAppointmentOnDate = (year: number, month: number, day: number): boolean => {
@@ -195,6 +208,142 @@ export default function CalendarPage() {
 
     return { appointmentColumns, columnCount: appointmentMaxColumns }
   }
+
+  const handleAppointmentDragStart = (
+    e: React.MouseEvent | React.TouchEvent,
+    appointmentId: number,
+    startDate: string,
+    dayIndex: number,
+  ) => {
+    e.stopPropagation()
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX
+
+    setDraggingAppointmentId(appointmentId)
+    setDragStartY(clientY)
+    setDragCurrentY(clientY)
+    setDragStartX(clientX)
+    setDragCurrentX(clientX)
+    setDragOriginalDayIndex(dayIndex)
+    setDragOriginalStartDate(startDate)
+    setHasDragged(false)
+
+    // Prevent text selection during drag
+    document.body.style.userSelect = "none"
+  }
+
+  const handleAppointmentDragMove = (e: MouseEvent | TouchEvent) => {
+    if (draggingAppointmentId === null) return
+
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX
+
+    const rawDragOffsetY = clientY - dragStartY
+    const rawDragOffsetX = clientX - dragStartX
+
+    if (Math.abs(rawDragOffsetY) > 5 || Math.abs(rawDragOffsetX) > 5) {
+      setHasDragged(true)
+    }
+
+    // Snap vertical movement to 15-minute increments
+    const pixelsPer15Min = 20
+    const snappedOffsetY = Math.round(rawDragOffsetY / pixelsPer15Min) * pixelsPer15Min
+
+    setDragCurrentY(dragStartY + snappedOffsetY)
+    setDragCurrentX(clientX)
+  }
+
+  const handleAppointmentDragEnd = () => {
+    if (draggingAppointmentId === null) return
+
+    const dragDeltaY = dragCurrentY - dragStartY
+    const dragDeltaX = dragCurrentX - dragStartX
+
+    // Calculate time change in 15-minute increments
+    const pixelsPer15Min = 20
+    const minutesChange = Math.round(dragDeltaY / pixelsPer15Min) * 15
+
+    // Estimate day column width (approximate based on viewport)
+    const dayColumnWidth = (window.innerWidth * 0.75) / (selectedView === "5日" ? 5 : 3) // Rough estimate
+    const dayOffset = Math.round(dragDeltaX / dayColumnWidth)
+
+    if (minutesChange !== 0 || dayOffset !== 0) {
+      const appointment = appointments.find((apt) => apt.id === draggingAppointmentId)
+      if (appointment) {
+        const originalStart = new Date(dragOriginalStartDate)
+        const originalEnd = new Date(appointment.endDate)
+        const duration = originalEnd.getTime() - originalStart.getTime()
+
+        const newStart = new Date(originalStart.getTime() + minutesChange * 60 * 1000)
+        // Add day offset
+        newStart.setDate(newStart.getDate() + dayOffset)
+        const newEnd = new Date(newStart.getTime() + duration)
+
+        // Format dates
+        const formatDateTime = (date: Date) => {
+          return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")}T${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`
+        }
+
+        // Update appointment
+        setAppointments(
+          appointments.map((apt) =>
+            apt.id === draggingAppointmentId
+              ? {
+                  ...apt,
+                  startDate: formatDateTime(newStart),
+                  endDate: formatDateTime(newEnd),
+                }
+              : apt,
+          ),
+        )
+      }
+    }
+
+    // Reset drag state
+    setDraggingAppointmentId(null)
+    setDragStartY(0)
+    setDragCurrentY(0)
+    setDragStartX(0)
+    setDragCurrentX(0)
+    setDragOriginalDayIndex(0)
+    setDragOriginalStartDate("")
+
+    setTimeout(() => {
+      setHasDragged(false)
+    }, 100)
+
+    document.body.style.userSelect = ""
+  }
+
+  React.useEffect(() => {
+    if (draggingAppointmentId !== null) {
+      const handleMouseMove = (e: MouseEvent) => handleAppointmentDragMove(e)
+      const handleTouchMove = (e: TouchEvent) => handleAppointmentDragMove(e)
+      const handleMouseUp = () => handleAppointmentDragEnd()
+      const handleTouchEnd = () => handleAppointmentDragEnd()
+
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("touchmove", handleTouchMove)
+      document.addEventListener("mouseup", handleMouseUp)
+      document.addEventListener("touchend", handleTouchEnd)
+
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove)
+        document.removeEventListener("touchmove", handleTouchMove)
+        document.removeEventListener("mouseup", handleMouseUp)
+        document.removeEventListener("touchend", handleTouchEnd)
+      }
+    }
+  }, [
+    draggingAppointmentId,
+    dragCurrentY,
+    dragStartY,
+    dragOriginalStartDate,
+    appointments,
+    dragCurrentX,
+    dragStartX,
+    dragOriginalDayIndex,
+  ])
 
   const todaysAppointments = getTodaysAppointments()
 
@@ -646,6 +795,53 @@ export default function CalendarPage() {
     setEditAppointmentForm({ title: "", startDate: "", endDate: "", location: "", memo: "" })
   }
 
+  const handleTimeSlotLongPress = (dayIndex: number, timeSlotIndex: number) => {
+    const startDate = selectedStartDate || new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    const dayDate = new Date(startDate)
+    dayDate.setDate(startDate.getDate() + dayIndex)
+
+    // Calculate the hour based on timeSlotIndex (0 = 終日, 1 = 0:00, 2 = 1:00, etc.)
+    const hour = timeSlotIndex - 1 // Subtract 1 because index 0 is 終日
+
+    let startDateTime: Date
+    let endDateTime: Date
+
+    if (hour < 0) {
+      // 終日 (all-day) - set to 9:00-17:00 as default
+      startDateTime = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 9, 0)
+      endDateTime = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 17, 0)
+    } else {
+      // Regular hour slot
+      startDateTime = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), hour, 0)
+      endDateTime = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), hour + 1, 0)
+    }
+
+    const startDateStr = `${startDateTime.getFullYear()}-${(startDateTime.getMonth() + 1).toString().padStart(2, "0")}-${startDateTime.getDate().toString().padStart(2, "0")}T${startDateTime.getHours().toString().padStart(2, "0")}:00`
+    const endDateStr = `${endDateTime.getFullYear()}-${(endDateTime.getMonth() + 1).toString().padStart(2, "0")}-${endDateTime.getDate().toString().padStart(2, "0")}T${endDateTime.getHours().toString().padStart(2, "0")}:00`
+
+    setAppointmentForm({
+      title: "",
+      startDate: startDateStr,
+      endDate: endDateStr,
+      location: "",
+      memo: "",
+    })
+    setIsCreatingAppointment(true)
+  }
+
+  const handleTimeSlotMouseDown = (dayIndex: number, timeSlotIndex: number) => {
+    longPressTimer.current = setTimeout(() => {
+      handleTimeSlotLongPress(dayIndex, timeSlotIndex)
+    }, 500) // 500ms long press duration
+  }
+
+  const handleTimeSlotMouseUp = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
   return (
     <div className="min-h-screen bg-calendar-bg p-4">
       <div className="flex gap-4 max-w-[1440px] mx-auto h-[calc(100vh-32px)]">
@@ -907,8 +1103,16 @@ export default function CalendarPage() {
 
                         {/* Time Slots Container - Single Rounded Rectangle */}
                         <div className="bg-calendar-card rounded-lg hover:bg-calendar-card-hover transition-colors cursor-pointer relative">
-                          {timeSlots.map((time) => (
-                            <div key={time} className="h-[80px] border-b border-calendar-divider last:border-b-0"></div>
+                          {timeSlots.map((time, timeSlotIndex) => (
+                            <div
+                              key={time}
+                              className="h-[80px] border-b border-calendar-divider last:border-b-0"
+                              onMouseDown={() => handleTimeSlotMouseDown(index, timeSlotIndex)}
+                              onMouseUp={handleTimeSlotMouseUp}
+                              onMouseLeave={handleTimeSlotMouseUp}
+                              onTouchStart={() => handleTimeSlotMouseDown(index, timeSlotIndex)}
+                              onTouchEnd={handleTimeSlotMouseUp}
+                            ></div>
                           ))}
 
                           {dayAppointments.map((apt) => {
@@ -918,19 +1122,43 @@ export default function CalendarPage() {
                             const widthPercent = 100 / totalColumns
                             const leftPercent = column * widthPercent
 
+                            // Calculate drag offset if this appointment is being dragged
+                            const isDragging = draggingAppointmentId === apt.id
+                            const dragOffsetY = isDragging ? dragCurrentY - dragStartY : 0
+                            const adjustedTop = top + dragOffsetY
+
                             return (
                               <div
                                 key={apt.id}
+                                onMouseDown={(e) => {
+                                  // Prevent long press timer when starting drag
+                                  if (longPressTimer.current) {
+                                    clearTimeout(longPressTimer.current)
+                                    longPressTimer.current = null
+                                  }
+                                  handleAppointmentDragStart(e, apt.id, apt.startDate, index)
+                                }}
+                                onTouchStart={(e) => {
+                                  if (longPressTimer.current) {
+                                    clearTimeout(longPressTimer.current)
+                                    longPressTimer.current = null
+                                  }
+                                  handleAppointmentDragStart(e, apt.id, apt.startDate, index)
+                                }}
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  startEditingAppointment(apt)
+                                  if (!hasDragged) {
+                                    startEditingAppointment(apt)
+                                  }
                                 }}
-                                className="absolute bg-calendar-primary text-white text-[12px] px-2 py-1 border-2 border-blue-600 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                                className={`absolute bg-calendar-primary text-white text-[12px] px-2 py-1 border-2 border-blue-600 rounded-lg overflow-hidden cursor-move hover:opacity-90 transition-opacity ${
+                                  isDragging ? "opacity-70 shadow-lg" : ""
+                                }`}
                                 style={{
-                                  top: `${top}px`,
+                                  top: `${adjustedTop}px`,
                                   height: `${height}px`,
                                   left: `${leftPercent}%`,
-                                  width: `${widthPercent - 2}%`, // -2% for narrow gap between overlapping appointments
+                                  width: `${widthPercent - 2}%`,
                                 }}
                               >
                                 <div className="font-semibold truncate">{apt.title}</div>
@@ -982,10 +1210,18 @@ export default function CalendarPage() {
                           {date.day}({date.weekday})
                         </div>
 
-                        {/* Time Slots Container - Single Rounded Rectangle */}
+                        {/* Time Slots Container */}
                         <div className="bg-calendar-card rounded-lg hover:bg-calendar-card-hover transition-colors cursor-pointer relative">
-                          {timeSlots.map((time) => (
-                            <div key={time} className="h-[80px] border-b border-calendar-divider last:border-b-0"></div>
+                          {timeSlots.map((time, timeSlotIndex) => (
+                            <div
+                              key={time}
+                              className="h-[80px] border-b border-calendar-divider last:border-b-0"
+                              onMouseDown={() => handleTimeSlotMouseDown(index, timeSlotIndex)}
+                              onMouseUp={handleTimeSlotMouseUp}
+                              onMouseLeave={handleTimeSlotMouseUp}
+                              onTouchStart={() => handleTimeSlotMouseDown(index, timeSlotIndex)}
+                              onTouchEnd={handleTimeSlotMouseUp}
+                            ></div>
                           ))}
 
                           {dayAppointments.map((apt) => {
@@ -995,19 +1231,42 @@ export default function CalendarPage() {
                             const widthPercent = 100 / totalColumns
                             const leftPercent = column * widthPercent
 
+                            // Calculate drag offset if this appointment is being dragged
+                            const isDragging = draggingAppointmentId === apt.id
+                            const dragOffsetY = isDragging ? dragCurrentY - dragStartY : 0
+                            const adjustedTop = top + dragOffsetY
+
                             return (
                               <div
                                 key={apt.id}
+                                onMouseDown={(e) => {
+                                  if (longPressTimer.current) {
+                                    clearTimeout(longPressTimer.current)
+                                    longPressTimer.current = null
+                                  }
+                                  handleAppointmentDragStart(e, apt.id, apt.startDate, index)
+                                }}
+                                onTouchStart={(e) => {
+                                  if (longPressTimer.current) {
+                                    clearTimeout(longPressTimer.current)
+                                    longPressTimer.current = null
+                                  }
+                                  handleAppointmentDragStart(e, apt.id, apt.startDate, index)
+                                }}
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  startEditingAppointment(apt)
+                                  if (!hasDragged) {
+                                    startEditingAppointment(apt)
+                                  }
                                 }}
-                                className="absolute bg-calendar-primary text-white text-[12px] px-2 py-1 border-2 border-blue-600 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                                className={`absolute bg-calendar-primary text-white text-[12px] px-2 py-1 border-2 border-blue-600 rounded-lg overflow-hidden cursor-move hover:opacity-90 transition-opacity ${
+                                  isDragging ? "opacity-70 shadow-lg" : ""
+                                }`}
                                 style={{
-                                  top: `${top}px`,
+                                  top: `${adjustedTop}px`,
                                   height: `${height}px`,
                                   left: `${leftPercent}%`,
-                                  width: `${widthPercent - 2}%`, // -2% for narrow gap between overlapping appointments
+                                  width: `${widthPercent - 2}%`,
                                 }}
                               >
                                 <div className="font-semibold truncate">{apt.title}</div>
