@@ -216,6 +216,7 @@ export default function CalendarPage() {
     dayIndex: number,
   ) => {
     e.stopPropagation()
+    e.preventDefault()
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX
 
@@ -230,6 +231,7 @@ export default function CalendarPage() {
 
     // Prevent text selection during drag
     document.body.style.userSelect = "none"
+    document.body.style.webkitUserSelect = "none"
   }
 
   const handleAppointmentDragMove = (e: MouseEvent | TouchEvent) => {
@@ -313,6 +315,7 @@ export default function CalendarPage() {
     }, 100)
 
     document.body.style.userSelect = ""
+    document.body.style.webkitUserSelect = ""
   }
 
   React.useEffect(() => {
@@ -1121,7 +1124,6 @@ export default function CalendarPage() {
                             const totalColumns = columnCount[apt.id]
                             const widthPercent = 100 / totalColumns
                             const leftPercent = column * widthPercent
-
                             // Calculate drag offset if this appointment is being dragged
                             const isDragging = draggingAppointmentId === apt.id
                             const dragOffsetY = isDragging ? dragCurrentY - dragStartY : 0
@@ -1151,7 +1153,7 @@ export default function CalendarPage() {
                                     startEditingAppointment(apt)
                                   }
                                 }}
-                                className={`absolute bg-calendar-primary text-white text-[12px] px-2 py-1 border-2 border-blue-600 rounded-lg overflow-hidden cursor-move hover:opacity-90 transition-opacity ${
+                                className={`absolute bg-calendar-primary text-white text-[12px] px-2 py-1 border-2 border-blue-600 rounded-lg overflow-hidden cursor-move hover:opacity-90 transition-opacity select-none ${
                                   isDragging ? "opacity-70 shadow-lg" : ""
                                 }`}
                                 style={{
@@ -1230,7 +1232,6 @@ export default function CalendarPage() {
                             const totalColumns = columnCount[apt.id]
                             const widthPercent = 100 / totalColumns
                             const leftPercent = column * widthPercent
-
                             // Calculate drag offset if this appointment is being dragged
                             const isDragging = draggingAppointmentId === apt.id
                             const dragOffsetY = isDragging ? dragCurrentY - dragStartY : 0
@@ -1259,7 +1260,7 @@ export default function CalendarPage() {
                                     startEditingAppointment(apt)
                                   }
                                 }}
-                                className={`absolute bg-calendar-primary text-white text-[12px] px-2 py-1 border-2 border-blue-600 rounded-lg overflow-hidden cursor-move hover:opacity-90 transition-opacity ${
+                                className={`absolute bg-calendar-primary text-white text-[12px] px-2 py-1 border-2 border-blue-600 rounded-lg overflow-hidden cursor-move hover:opacity-90 transition-opacity select-none ${
                                   isDragging ? "opacity-70 shadow-lg" : ""
                                 }`}
                                 style={{
